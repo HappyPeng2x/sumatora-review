@@ -37,9 +37,10 @@ to Home Screen" gets no real icon on most platforms.
 language being drafted, but will need a picker (or at least a build-time/URL param)
 once other target languages have proposal chunks worth reviewing.
 
-## No way to revisit a decided entry
+## ~~No way to revisit a decided entry~~ (done)
 
-Once accepted/rejected, an entry drops out of the queue with no browse/undo view --
-decisions only live in this browser's IndexedDB (`decisions` store). If a wrong
-Accept/Reject slips through, fixing it today means editing IndexedDB by hand or
-correcting `patches/translations/fre/{seq}.json` directly in SumatoraIndex.
+Added a History tab (`HistoryPage.tsx` + shared `EntryReviewer.tsx`) listing every
+decision, most recent first, that reopens the same inline-editable card pre-filled
+with what was previously recorded and lets you re-decide. Correcting an Accept to a
+Reject also deletes the previously-written patch file in SumatoraIndex
+(`revertAcceptedProposal`), not just the local record.
