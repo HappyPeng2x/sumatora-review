@@ -2,8 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { buildQueue, type QueueEntry } from '../lib/reviewQueue'
 import { getDecidedSeqs, recordDecision, getSetting } from '../lib/db'
 import { fetchProposal, acceptProposal, type Proposal } from '../lib/proposals'
-import { ContextCard } from '../components/ContextCard'
-import { DecisionBar } from '../components/DecisionBar'
+import { EntryReviewer } from '../components/EntryReviewer'
 
 const LANG = 'fre'
 
@@ -12,7 +11,6 @@ export function ReviewPage() {
   const [decided, setDecided] = useState<Set<number>>(new Set())
   const [index, setIndex] = useState(0)
   const [proposal, setProposal] = useState<Proposal | null>(null)
-  const [glosses, setGlosses] = useState<string[][]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -43,7 +41,6 @@ export function ReviewPage() {
       .then((p) => {
         if (cancelled) return
         setProposal(p)
-        setGlosses(p.glosses)
       })
       .catch((e) => !cancelled && setError(e instanceof Error ? e.message : String(e)))
     return () => {
@@ -51,15 +48,7 @@ export function ReviewPage() {
     }
   }, [current])
 
-  function handleChangeSense(senseIndex: number, senseGlosses: string[]) {
-    setGlosses((prev) => {
-      const next = prev.slice()
-      next[senseIndex] = senseGlosses
-      return next
-    })
-  }
-
-  async function handleDecide(decision: 'accepted' | 'rejected') {
+  async function handleDecide(decision: 'accepted' | 'rejected', glosses: string[][]) {
     if (!current) return
     setBusy(true)
     setError(null)
@@ -106,19 +95,20 @@ export function ReviewPage() {
       {error && <div className="px-4 py-2 text-red-400 text-sm flex-shrink-0">{error}</div>}
       <div className="flex-1 overflow-y-auto flex flex-col gap-3 p-3">
         {proposal ? (
-          <>
-            {/* Only mounted once the proposal has loaded, so the initial
-                defaultValue each input seeds itself with (see ContextCard's
-                slot-filling effect) is never a race against this fetch --
-                key={seq} already forces a fresh mount per entry anyway. */}
-            <ContextCard key={current.seq} seq={current.seq} glosses={glosses} onChangeSense={handleChangeSense} />
-            <DecisionBar
-              model={proposal.model}
-              busy={busy}
-              onAccept={() => handleDecide('accepted')}
-              onReject={() => handleDecide('rejected')}
-            />
-          </>
+          // Only mounted once the proposal has loaded, so the initial
+          // defaultValue each input seeds itself with (see ContextCard's
+          // slot-filling effect) is never a race against this fetch --
+          // key={seq} on EntryReviewer already forces a fresh mount per
+          // entry anyway.
+          <EntryReviewer
+            key={current.seq}
+            seq={current.seq}
+            model={proposal.model}
+            initialGlosses={proposal.glosses}
+            busy={busy}
+            onAccept={(glosses) => handleDecide('accepted', glosses)}
+            onReject={(glosses) => handleDecide('rejected', glosses)}
+          />
         ) : (
           <div className="text-slate-500 text-sm p-4">Loading proposal…</div>
         )}

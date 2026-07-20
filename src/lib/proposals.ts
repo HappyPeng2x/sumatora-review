@@ -1,4 +1,4 @@
-import { fetchJson, rawUrl, putFile, PROPOSALS_REPO, PROPOSALS_REF } from './github'
+import { fetchJson, rawUrl, putFile, deleteFile, PROPOSALS_REPO, PROPOSALS_REF } from './github'
 
 export interface Proposal {
   seq: number
@@ -29,4 +29,22 @@ export async function acceptProposal(
     token,
     `Accept ${lang} translation for seq ${seq}`,
   )
+}
+
+/**
+ * Revert a previously-accepted translation -- used when a History redo
+ * corrects an earlier Accept to a Reject. No-op if nothing was accepted for
+ * this seq (Accept was never clicked, or it was already reverted).
+ */
+export async function revertAcceptedProposal(seq: number, lang: string, token: string): Promise<void> {
+  await deleteFile(
+    `patches/translations/${lang}/${seq}.json`,
+    token,
+    `Revert accepted ${lang} translation for seq ${seq}`,
+  )
+}
+
+/** Deterministic path for a seq within a language dir, matching propose-translations.py's sharding. */
+export function proposalPath(seq: number): string {
+  return `${Math.floor(seq / 10000)}/${seq}.json`
 }

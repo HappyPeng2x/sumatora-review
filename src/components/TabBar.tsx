@@ -1,4 +1,4 @@
-export type Tab = 'review' | 'settings'
+export type Tab = 'review' | 'history' | 'settings'
 
 interface Props {
   activeTab: Tab
@@ -7,6 +7,7 @@ interface Props {
 
 const tabs: { id: Tab; label: string }[] = [
   { id: 'review', label: 'Review' },
+  { id: 'history', label: 'History' },
   { id: 'settings', label: 'Settings' },
 ]
 

@@ -49,6 +49,11 @@ export async function recordDecision(decision: ReviewDecision): Promise<void> {
   await db.put('decisions', decision)
 }
 
+export async function getAllDecisions(): Promise<ReviewDecision[]> {
+  const db = await getDB()
+  return db.getAll('decisions')
+}
+
 export async function getSetting(key: string): Promise<string | undefined> {
   const db = await getDB()
   return db.get('settings', key)

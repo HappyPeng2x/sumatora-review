@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { ReviewPage } from './pages/ReviewPage'
+import { HistoryPage } from './pages/HistoryPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { TabBar, type Tab } from './components/TabBar'
 
 const PAGE_TITLES: Record<Tab, string> = {
   review: 'Sumatora Review',
+  history: 'History',
   settings: 'Settings',
 }
 
@@ -21,6 +23,7 @@ function App() {
       </header>
       <main className="flex-1 overflow-hidden">
         {activeTab === 'review' && <ReviewPage />}
+        {activeTab === 'history' && <HistoryPage />}
         {activeTab === 'settings' && <SettingsPage />}
       </main>
       <TabBar activeTab={activeTab} onTabChange={setActiveTab} />

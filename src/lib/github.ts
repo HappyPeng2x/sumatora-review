@@ -89,3 +89,32 @@ export async function putFile(path: string, content: object, token: string, mess
     throw new Error(`GitHub write failed (${res.status}): ${detail}`)
   }
 }
+
+/**
+ * Delete a file from INDEX_REPO via the Contents API, if it exists. Used to
+ * revert a previously-accepted translation when a decision is corrected to
+ * Reject during a History redo -- a no-op (not an error) if nothing was ever
+ * accepted for this path.
+ */
+export async function deleteFile(path: string, token: string, message: string): Promise<void> {
+  const apiUrl = `https://api.github.com/repos/${INDEX_REPO}/contents/${path}`
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/vnd.github+json',
+  }
+
+  const existing = await fetch(`${apiUrl}?ref=${INDEX_REF}`, { headers })
+  if (existing.status === 404) return
+  if (!existing.ok) throw new Error(`Checking existing file failed: ${existing.status}`)
+  const { sha } = (await existing.json()) as { sha: string }
+
+  const res = await fetch(apiUrl, {
+    method: 'DELETE',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, sha, branch: INDEX_REF }),
+  })
+  if (!res.ok) {
+    const detail = await res.text()
+    throw new Error(`GitHub delete failed (${res.status}): ${detail}`)
+  }
+}
