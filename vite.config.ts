@@ -15,7 +15,12 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      registerType: 'prompt',
+      // 'prompt' fires a needRefresh event that nothing in this app listens
+      // for, so a new deploy would otherwise sit cached behind the old
+      // service worker indefinitely; autoUpdate just activates new builds
+      // on the next load, which is fine for a single-user review tool with
+      // no in-app update UI.
+      registerType: 'autoUpdate',
       manifest: {
         name: 'Sumatora Review',
         short_name: 'Review',
