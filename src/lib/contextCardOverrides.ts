@@ -1,15 +1,22 @@
 // jitendex.css/common.css are a fixed light theme (no prefers-color-scheme
-// support) -- this app is dark-only, so the white entry card read as a jarring
-// hole in the page. This stylesheet overrides just what needs to change for
-// legibility on a dark background (page background/text, table chrome, the
-// radial-gradient form badges that fade to white by design); tag chips,
-// priority badges, and colored info-box borders already have their own
-// solid/high-contrast colors and are left alone. Injected *after*
-// jitendex.css/common.css in the iframe's <style> block so normal cascade
-// order lets it win without needing !important.
+// support) written for a full HTML document -- this app injects just the
+// <article> content into a shadow root (see ContextCard.tsx), so document-
+// level selectors like `body` never match anything real and need
+// redirecting to :host (the shadow root's attachment point) instead.
+// Everything else here overrides just what needed to change for legibility
+// on a dark background; tag chips, priority badges, and colored info-box
+// borders already have their own solid/high-contrast colors and are left
+// alone. Injected *after* jitendex.css/common.css so normal cascade order
+// lets it win without needing !important.
 export const DARK_OVERRIDES = `
-:root { color-scheme: dark; }
-body { background: #0f172a; color: #cbd5e1; }
+:host {
+  display: block;
+  color-scheme: dark;
+  font-family: jpmincho, serif;
+  line-height: 1.5em;
+  background: #0f172a;
+  color: #cbd5e1;
+}
 a { color: #818cf8; }
 a:hover { color: #a5b4fc; }
 a:active { color: #fca5a5; }
@@ -27,20 +34,27 @@ th { background-color: #1e293b; color: #cbd5e1; }
 .form-rare > span { background: #9333ea; }
 .form-valid > span { background: #475569; }
 
-/* AI-drafted translation, interleaved per sense next to the English gloss
-   it corresponds to (see interleaveTranslation() in ContextCard.tsx) -- the
-   same side-by-side layout propose-translations.py's chunk .md summaries
-   use for spot-checking, just inline instead of a separate table. */
-.glossary-translation {
+/* The editable translation draft, injected as a real <input> right after
+   each English .glossary block (see ContextCard.tsx's slot-filling effect)
+   -- same side-by-side spirit as propose-translations.py's chunk .md
+   summaries, but live-editable inline instead of a separate read-only panel. */
+.glossary-translation-input {
   display: block;
-  margin-top: 0.15rem;
-  color: #38bdf8;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 0.25rem;
+  padding: 0.25rem 0.5rem;
   font-style: italic;
+  font-family: jpmincho, serif;
+  font-size: 1rem;
+  color: #7dd3fc;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 0.3rem;
 }
-.glossary-translation::before {
-  content: attr(data-lang-label) ' ';
-  font-style: normal;
-  font-weight: 600;
-  opacity: 0.75;
+.glossary-translation-input:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.4);
 }
 `

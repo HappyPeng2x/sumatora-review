@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { buildQueue, type QueueEntry } from '../lib/reviewQueue'
 import { getDecidedSeqs, recordDecision, getSetting } from '../lib/db'
-import { acceptProposal } from '../lib/proposals'
+import { fetchProposal, acceptProposal, type Proposal } from '../lib/proposals'
 import { ContextCard } from '../components/ContextCard'
-import { ProposalEditor } from '../components/ProposalEditor'
+import { DecisionBar } from '../components/DecisionBar'
 
 const LANG = 'fre'
 
@@ -11,6 +11,8 @@ export function ReviewPage() {
   const [queue, setQueue] = useState<QueueEntry[] | null>(null)
   const [decided, setDecided] = useState<Set<number>>(new Set())
   const [index, setIndex] = useState(0)
+  const [proposal, setProposal] = useState<Proposal | null>(null)
+  const [glosses, setGlosses] = useState<string[][]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -33,7 +35,31 @@ export function ReviewPage() {
 
   const current = queue?.[index]
 
-  async function handleDecide(decision: 'accepted' | 'rejected', glosses?: string[][]) {
+  useEffect(() => {
+    if (!current) return
+    let cancelled = false
+    setProposal(null)
+    fetchProposal(LANG, current.path)
+      .then((p) => {
+        if (cancelled) return
+        setProposal(p)
+        setGlosses(p.glosses)
+      })
+      .catch((e) => !cancelled && setError(e instanceof Error ? e.message : String(e)))
+    return () => {
+      cancelled = true
+    }
+  }, [current])
+
+  function handleChangeSense(senseIndex: number, senseGlosses: string[]) {
+    setGlosses((prev) => {
+      const next = prev.slice()
+      next[senseIndex] = senseGlosses
+      return next
+    })
+  }
+
+  async function handleDecide(decision: 'accepted' | 'rejected') {
     if (!current) return
     setBusy(true)
     setError(null)
@@ -41,7 +67,7 @@ export function ReviewPage() {
       if (decision === 'accepted') {
         const token = await getSetting('githubToken')
         if (!token) throw new Error('No GitHub token set -- add one in Settings first')
-        await acceptProposal(current.seq, LANG, glosses ?? [], token)
+        await acceptProposal(current.seq, LANG, glosses, token)
       }
       await recordDecision({ seq: current.seq, lang: LANG, decision, glosses, reviewedAt: Date.now() })
       setDecided((prev) => new Set(prev).add(current.seq))
@@ -78,13 +104,24 @@ export function ReviewPage() {
         {decided.size} / {queue.length} reviewed &middot; seq {current.seq}
       </div>
       {error && <div className="px-4 py-2 text-red-400 text-sm flex-shrink-0">{error}</div>}
-      <div className="flex-1 overflow-y-auto flex flex-col md:flex-row gap-3 p-3">
-        <div className="flex-1 min-h-96">
-          <ContextCard key={current.seq} seq={current.seq} />
-        </div>
-        <div className="flex-1">
-          <ProposalEditor key={current.seq} lang={LANG} path={current.path} busy={busy} onDecide={handleDecide} />
-        </div>
+      <div className="flex-1 overflow-y-auto flex flex-col gap-3 p-3">
+        {proposal ? (
+          <>
+            {/* Only mounted once the proposal has loaded, so the initial
+                defaultValue each input seeds itself with (see ContextCard's
+                slot-filling effect) is never a race against this fetch --
+                key={seq} already forces a fresh mount per entry anyway. */}
+            <ContextCard key={current.seq} seq={current.seq} glosses={glosses} onChangeSense={handleChangeSense} />
+            <DecisionBar
+              model={proposal.model}
+              busy={busy}
+              onAccept={() => handleDecide('accepted')}
+              onReject={() => handleDecide('rejected')}
+            />
+          </>
+        ) : (
+          <div className="text-slate-500 text-sm p-4">Loading proposal…</div>
+        )}
       </div>
     </div>
   )
