@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { buildQueue, type QueueEntry } from '../lib/reviewQueue'
-import { getDecidedSeqs, recordDecision, getSetting } from '../lib/db'
+import { getDecidedSeqs, recordDecision, getSetting, type Decision } from '../lib/db'
 import { fetchProposal, acceptProposal, fetchAcceptedSeqs, type Proposal } from '../lib/proposals'
-import { requestRegeneration } from '../lib/regenerate'
+import { requestRegeneration, fetchRegenerateRequestedSeqs } from '../lib/regenerate'
 import { EntryReviewer } from '../components/EntryReviewer'
 
 const LANG = 'fre'
@@ -14,20 +14,21 @@ export function ReviewPage() {
   const [proposal, setProposal] = useState<Proposal | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [rerunRequested, setRerunRequested] = useState<Set<number>>(new Set())
 
   const refresh = useCallback(async () => {
     setError(null)
     try {
       // Union local decisions (covers Rejects, which have no git trace) with
-      // git-accepted seqs (covers Accepts made from another device) -- see
-      // fetchAcceptedSeqs for why only Accepts are recoverable from git.
-      const [q, local, accepted] = await Promise.all([
+      // git-accepted and git-pending-regeneration seqs (covers those made
+      // from another device) -- see fetchAcceptedSeqs/fetchRegenerateRequestedSeqs
+      // for why only those two are recoverable from git.
+      const [q, local, accepted, regenerating] = await Promise.all([
         buildQueue(LANG),
         getDecidedSeqs(),
         fetchAcceptedSeqs(LANG),
+        fetchRegenerateRequestedSeqs(LANG),
       ])
-      const d = new Set([...local, ...accepted])
+      const d = new Set([...local, ...accepted, ...regenerating])
       setQueue(q)
       setDecided(d)
       const firstUndecided = q.findIndex((e) => !d.has(e.seq))
@@ -58,35 +59,23 @@ export function ReviewPage() {
     }
   }, [current])
 
-  async function handleDecide(decision: 'accepted' | 'rejected', glosses: string[][]) {
+  async function handleDecide(decision: Decision, glosses: string[][]) {
     if (!current) return
     setBusy(true)
     setError(null)
     try {
-      if (decision === 'accepted') {
+      if (decision === 'accepted' || decision === 'regenerate_requested') {
         const token = await getSetting('githubToken')
         if (!token) throw new Error('No GitHub token set -- add one in Settings first')
-        await acceptProposal(current.seq, LANG, glosses, token)
+        if (decision === 'accepted') {
+          await acceptProposal(current.seq, LANG, glosses, token)
+        } else {
+          await requestRegeneration(current.seq, LANG, token)
+        }
       }
       await recordDecision({ seq: current.seq, lang: LANG, decision, glosses, reviewedAt: Date.now() })
       setDecided((prev) => new Set(prev).add(current.seq))
       setIndex((i) => i + 1)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function handleRerunAI() {
-    if (!current) return
-    setBusy(true)
-    setError(null)
-    try {
-      const token = await getSetting('githubToken')
-      if (!token) throw new Error('No GitHub token set -- add one in Settings first')
-      await requestRegeneration(current.seq, LANG, token)
-      setRerunRequested((prev) => new Set(prev).add(current.seq))
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -134,8 +123,7 @@ export function ReviewPage() {
             busy={busy}
             onAccept={(glosses) => handleDecide('accepted', glosses)}
             onReject={(glosses) => handleDecide('rejected', glosses)}
-            onRerunAI={handleRerunAI}
-            rerunRequested={rerunRequested.has(current.seq)}
+            onRerunAI={(glosses) => handleDecide('regenerate_requested', glosses)}
           />
         ) : (
           <div className="text-slate-500 text-sm p-4">Loading proposal…</div>

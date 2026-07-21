@@ -1,9 +1,11 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
 
+export type Decision = 'accepted' | 'rejected' | 'regenerate_requested'
+
 export interface ReviewDecision {
   seq: number
   lang: string
-  decision: 'accepted' | 'rejected'
+  decision: Decision
   glosses?: string[][]
   reviewedAt: number
 }

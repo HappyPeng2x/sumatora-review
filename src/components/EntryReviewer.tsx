@@ -9,8 +9,7 @@ interface Props {
   busy: boolean
   onAccept: (glosses: string[][]) => void
   onReject: (glosses: string[][]) => void
-  onRerunAI?: () => void
-  rerunRequested?: boolean
+  onRerunAI?: (glosses: string[][]) => void
 }
 
 /**
@@ -19,16 +18,7 @@ interface Props {
  * glosses draft itself so both callers just get the final value back at
  * decide-time instead of having to mirror this state themselves.
  */
-export function EntryReviewer({
-  seq,
-  model,
-  initialGlosses,
-  busy,
-  onAccept,
-  onReject,
-  onRerunAI,
-  rerunRequested,
-}: Props) {
+export function EntryReviewer({ seq, model, initialGlosses, busy, onAccept, onReject, onRerunAI }: Props) {
   const [glosses, setGlosses] = useState(initialGlosses)
 
   function handleChangeSense(senseIndex: number, senseGlosses: string[]) {
@@ -47,8 +37,7 @@ export function EntryReviewer({
         busy={busy}
         onAccept={() => onAccept(glosses)}
         onReject={() => onReject(glosses)}
-        onRerunAI={onRerunAI}
-        rerunRequested={rerunRequested}
+        onRerunAI={onRerunAI ? () => onRerunAI(glosses) : undefined}
       />
     </>
   )

@@ -4,15 +4,18 @@ interface Props {
   onAccept: () => void
   onReject: () => void
   onRerunAI?: () => void
-  rerunRequested?: boolean
 }
 
 /**
- * Just the decision itself -- the actual editable draft lives inline in
- * ContextCard now, right next to the English sense it translates, so this
- * doesn't need to show or own any per-sense state.
+ * Three parallel outcomes for a draft, not two-plus-an-afterthought: Accept,
+ * Reject, or ask the AI to redraft it (its own status -- neither an accepted
+ * translation nor a rejected one, just deferred pending a better draft).
+ * Clicking any of them hands off to the caller's own decide/advance flow
+ * (see ReviewPage/HistoryPage's handlers), so this button set doesn't try to
+ * show its own "requested" confirmation state -- the entry moves on exactly
+ * like Accept/Reject do, and its status shows up in History.
  */
-export function DecisionBar({ model, busy, onAccept, onReject, onRerunAI, rerunRequested }: Props) {
+export function DecisionBar({ model, busy, onAccept, onReject, onRerunAI }: Props) {
   return (
     <div className="flex flex-col gap-3 p-4 bg-slate-800 rounded-lg border border-slate-700">
       <div className="text-xs text-slate-500">Draft by {model} &middot; edit inline above, semicolon-separated synonyms</div>
@@ -34,11 +37,11 @@ export function DecisionBar({ model, busy, onAccept, onReject, onRerunAI, rerunR
       </div>
       {onRerunAI && (
         <button
-          disabled={busy || rerunRequested}
+          disabled={busy}
           onClick={onRerunAI}
-          className="text-xs text-indigo-400 hover:text-indigo-300 disabled:opacity-50 disabled:hover:text-indigo-400 self-start"
+          className="bg-amber-700/40 hover:bg-amber-700/60 active:bg-amber-700/70 disabled:opacity-50 text-amber-200 border border-amber-700/60 rounded-lg py-2 font-medium text-sm"
         >
-          {rerunRequested ? 'Regeneration requested ✓' : 'Draft looks wrong – re-run AI ↻'}
+          Draft looks wrong – re-run AI ↻
         </button>
       )}
     </div>
