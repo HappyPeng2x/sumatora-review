@@ -118,6 +118,7 @@ export function ReviewPage() {
           <EntryReviewer
             key={current.seq}
             seq={current.seq}
+            lang={LANG}
             model={proposal.model}
             initialGlosses={proposal.glosses}
             busy={busy}

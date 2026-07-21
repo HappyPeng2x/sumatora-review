@@ -166,6 +166,7 @@ export function HistoryPage() {
             <EntryReviewer
               key={redoSeq}
               seq={redoSeq}
+              lang={LANG}
               model={proposal.model}
               initialGlosses={redoInitialGlosses}
               busy={busy}

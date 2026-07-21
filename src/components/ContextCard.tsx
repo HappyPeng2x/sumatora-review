@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { fetchText, rawUrl, RENDER_REPO, RENDER_REF } from '../lib/github'
 import { markTranslationSlots } from '../lib/interleave'
 import { DARK_OVERRIDES } from '../lib/contextCardOverrides'
@@ -26,6 +26,15 @@ interface Props {
   onChangeSense: (senseIndex: number, glosses: string[]) => void
 }
 
+export interface ContextCardHandle {
+  /** Imperatively set a sense's visible input value (e.g. "use this Gemini
+   * suggestion") -- has to go through the real DOM input, not the `glosses`
+   * prop, since these inputs are deliberately uncontrolled (see below); this
+   * dispatches the same 'input' event a keystroke would, so it flows through
+   * the existing onChangeSense wiring instead of duplicating that parsing. */
+  setSenseValue: (senseIndex: number, text: string) => void
+}
+
 /**
  * Renders gitenderml's pre-rendered Jitendex-styled entry card for full
  * context (headword+furigana, every English sense with tags/restrictions,
@@ -42,7 +51,10 @@ interface Props {
  * fairly generic selectors (`a`, `table`, `.sense`, ...) stay fully
  * contained and can never leak into the rest of this app's styling.
  */
-export function ContextCard({ seq, contextLang = 'eng', glosses, onChangeSense }: Props) {
+export const ContextCard = forwardRef<ContextCardHandle, Props>(function ContextCard(
+  { seq, contextLang = 'eng', glosses, onChangeSense },
+  ref,
+) {
   const hostRef = useRef<HTMLDivElement>(null)
   const [articleHtml, setArticleHtml] = useState<string | null>(null)
   const [css, setCss] = useState<string | null>(null)
@@ -97,6 +109,7 @@ export function ContextCard({ seq, contextLang = 'eng', glosses, onChangeSense }
       input.className = 'glossary-translation-input'
       input.lang = 'fr'
       input.placeholder = '(no draft)'
+      input.dataset.senseIndex = String(senseIndex)
       input.defaultValue = (glossesRef.current[senseIndex] ?? []).join('; ')
       const onInput = () => {
         const parsed = input.value.split(';').map((s) => s.trim()).filter(Boolean)
@@ -112,6 +125,16 @@ export function ContextCard({ seq, contextLang = 'eng', glosses, onChangeSense }
     }
   }, [articleHtml, css])
 
+  useImperativeHandle(ref, () => ({
+    setSenseValue(senseIndex, text) {
+      const shadow = hostRef.current?.shadowRoot
+      const input = shadow?.querySelector<HTMLInputElement>(`input[data-sense-index="${senseIndex}"]`)
+      if (!input) return
+      input.value = text
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    },
+  }), [])
+
   if (error) {
     return <div className="text-red-400 text-sm p-4">No {contextLang} context card for seq {seq}: {error}</div>
   }
@@ -125,4 +148,4 @@ export function ContextCard({ seq, contextLang = 'eng', glosses, onChangeSense }
       className="w-full h-full min-h-96 bg-slate-900 rounded-lg border border-slate-700 overflow-auto p-3"
     />
   )
-}
+})
