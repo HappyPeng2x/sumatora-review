@@ -1,23 +1,51 @@
 import { useCallback, useEffect, useState } from 'react'
-import { getAllDecisions, recordDecision, getSetting, type ReviewDecision } from '../lib/db'
-import { fetchProposal, acceptProposal, revertAcceptedProposal, proposalPath, type Proposal } from '../lib/proposals'
+import { getAllDecisions, recordDecision, getSetting } from '../lib/db'
+import {
+  fetchProposal,
+  acceptProposal,
+  revertAcceptedProposal,
+  fetchAcceptedSeqs,
+  fetchAcceptedTranslation,
+  proposalPath,
+  type Proposal,
+} from '../lib/proposals'
+import { requestRegeneration } from '../lib/regenerate'
 import { EntryReviewer } from '../components/EntryReviewer'
 
 const LANG = 'fre'
 
+interface HistoryRow {
+  seq: number
+  decision: 'accepted' | 'rejected'
+  /** null for a row known only from git (accepted on another device) --
+   * the Contents/Trees API doesn't expose a commit timestamp per file
+   * cheaply, so these just sort after every row with a real one. */
+  reviewedAt: number | null
+  glosses?: string[][]
+}
+
 export function HistoryPage() {
-  const [decisions, setDecisions] = useState<ReviewDecision[] | null>(null)
+  const [rows, setRows] = useState<HistoryRow[] | null>(null)
   const [redoSeq, setRedoSeq] = useState<number | null>(null)
   const [proposal, setProposal] = useState<Proposal | null>(null)
+  const [redoInitialGlosses, setRedoInitialGlosses] = useState<string[][] | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [rerunRequested, setRerunRequested] = useState<Set<number>>(new Set())
 
   const refresh = useCallback(async () => {
     setError(null)
     try {
-      const all = await getAllDecisions()
-      all.sort((a, b) => b.reviewedAt - a.reviewedAt)
-      setDecisions(all)
+      const [local, accepted] = await Promise.all([getAllDecisions(), fetchAcceptedSeqs(LANG)])
+      const localSeqs = new Set(local.map((d) => d.seq))
+      const merged: HistoryRow[] = [
+        ...local.map((d): HistoryRow => ({ seq: d.seq, decision: d.decision, reviewedAt: d.reviewedAt, glosses: d.glosses })),
+        ...[...accepted]
+          .filter((seq) => !localSeqs.has(seq))
+          .map((seq): HistoryRow => ({ seq, decision: 'accepted', reviewedAt: null })),
+      ]
+      merged.sort((a, b) => (b.reviewedAt ?? -1) - (a.reviewedAt ?? -1))
+      setRows(merged)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
@@ -31,13 +59,26 @@ export function HistoryPage() {
     if (redoSeq == null) return
     let cancelled = false
     setProposal(null)
-    fetchProposal(LANG, proposalPath(redoSeq))
-      .then((p) => !cancelled && setProposal(p))
+    setRedoInitialGlosses(null)
+    const row = rows?.find((r) => r.seq === redoSeq)
+    Promise.all([
+      fetchProposal(LANG, proposalPath(redoSeq)),
+      // A local decision already carries the right seed value (see below);
+      // only a git-only accepted row needs its content fetched separately.
+      row?.glosses ? Promise.resolve(row.glosses) : row?.decision === 'accepted'
+        ? fetchAcceptedTranslation(redoSeq, LANG)
+        : Promise.resolve(undefined),
+    ])
+      .then(([p, seed]) => {
+        if (cancelled) return
+        setProposal(p)
+        setRedoInitialGlosses(seed ?? p.glosses)
+      })
       .catch((e) => !cancelled && setError(e instanceof Error ? e.message : String(e)))
     return () => {
       cancelled = true
     }
-  }, [redoSeq])
+  }, [redoSeq, rows])
 
   async function handleRedecide(decision: 'accepted' | 'rejected', glosses: string[][]) {
     if (redoSeq == null) return
@@ -64,6 +105,22 @@ export function HistoryPage() {
     }
   }
 
+  async function handleRerunAI() {
+    if (redoSeq == null) return
+    setBusy(true)
+    setError(null)
+    try {
+      const token = await getSetting('githubToken')
+      if (!token) throw new Error('No GitHub token set -- add one in Settings first')
+      await requestRegeneration(redoSeq, LANG, token)
+      setRerunRequested((prev) => new Set(prev).add(redoSeq))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   if (redoSeq != null) {
     return (
       <div className="flex flex-col h-full">
@@ -75,15 +132,17 @@ export function HistoryPage() {
         </div>
         {error && <div className="px-4 py-2 text-red-400 text-sm flex-shrink-0">{error}</div>}
         <div className="flex-1 overflow-y-auto flex flex-col gap-3 p-3">
-          {proposal ? (
+          {proposal && redoInitialGlosses ? (
             <EntryReviewer
               key={redoSeq}
               seq={redoSeq}
               model={proposal.model}
-              initialGlosses={decisions?.find((d) => d.seq === redoSeq)?.glosses ?? proposal.glosses}
+              initialGlosses={redoInitialGlosses}
               busy={busy}
               onAccept={(glosses) => handleRedecide('accepted', glosses)}
               onReject={(glosses) => handleRedecide('rejected', glosses)}
+              onRerunAI={handleRerunAI}
+              rerunRequested={rerunRequested.has(redoSeq)}
             />
           ) : (
             <div className="text-slate-500 text-sm p-4">Loading proposal…</div>
@@ -93,13 +152,13 @@ export function HistoryPage() {
     )
   }
 
-  if (error && !decisions) {
+  if (error && !rows) {
     return <div className="p-4 text-red-400">{error}</div>
   }
-  if (!decisions) {
+  if (!rows) {
     return <div className="p-4 text-slate-500">Loading history…</div>
   }
-  if (decisions.length === 0) {
+  if (rows.length === 0) {
     return <div className="p-4 text-slate-400">No reviewed entries yet.</div>
   }
 
@@ -107,7 +166,7 @@ export function HistoryPage() {
     <div className="flex flex-col h-full overflow-y-auto">
       {error && <div className="px-4 py-2 text-red-400 text-sm flex-shrink-0">{error}</div>}
       <div className="flex flex-col divide-y divide-slate-800">
-        {decisions.map((d) => (
+        {rows.map((d) => (
           <button
             key={d.seq}
             onClick={() => setRedoSeq(d.seq)}
@@ -115,7 +174,9 @@ export function HistoryPage() {
           >
             <div className="flex flex-col">
               <span className="text-slate-100 text-sm">seq {d.seq}</span>
-              <span className="text-slate-500 text-xs">{new Date(d.reviewedAt).toLocaleString()}</span>
+              <span className="text-slate-500 text-xs">
+                {d.reviewedAt != null ? new Date(d.reviewedAt).toLocaleString() : 'accepted elsewhere'}
+              </span>
             </div>
             <span
               className={`text-xs font-medium px-2 py-1 rounded-full flex-shrink-0 ${

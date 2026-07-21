@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { buildQueue, type QueueEntry } from '../lib/reviewQueue'
 import { getDecidedSeqs, recordDecision, getSetting } from '../lib/db'
-import { fetchProposal, acceptProposal, type Proposal } from '../lib/proposals'
+import { fetchProposal, acceptProposal, fetchAcceptedSeqs, type Proposal } from '../lib/proposals'
+import { requestRegeneration } from '../lib/regenerate'
 import { EntryReviewer } from '../components/EntryReviewer'
 
 const LANG = 'fre'
@@ -13,11 +14,20 @@ export function ReviewPage() {
   const [proposal, setProposal] = useState<Proposal | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [rerunRequested, setRerunRequested] = useState<Set<number>>(new Set())
 
   const refresh = useCallback(async () => {
     setError(null)
     try {
-      const [q, d] = await Promise.all([buildQueue(LANG), getDecidedSeqs()])
+      // Union local decisions (covers Rejects, which have no git trace) with
+      // git-accepted seqs (covers Accepts made from another device) -- see
+      // fetchAcceptedSeqs for why only Accepts are recoverable from git.
+      const [q, local, accepted] = await Promise.all([
+        buildQueue(LANG),
+        getDecidedSeqs(),
+        fetchAcceptedSeqs(LANG),
+      ])
+      const d = new Set([...local, ...accepted])
       setQueue(q)
       setDecided(d)
       const firstUndecided = q.findIndex((e) => !d.has(e.seq))
@@ -68,6 +78,22 @@ export function ReviewPage() {
     }
   }
 
+  async function handleRerunAI() {
+    if (!current) return
+    setBusy(true)
+    setError(null)
+    try {
+      const token = await getSetting('githubToken')
+      if (!token) throw new Error('No GitHub token set -- add one in Settings first')
+      await requestRegeneration(current.seq, LANG, token)
+      setRerunRequested((prev) => new Set(prev).add(current.seq))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   if (error && !queue) {
     return <div className="p-4 text-red-400">{error}</div>
   }
@@ -108,6 +134,8 @@ export function ReviewPage() {
             busy={busy}
             onAccept={(glosses) => handleDecide('accepted', glosses)}
             onReject={(glosses) => handleDecide('rejected', glosses)}
+            onRerunAI={handleRerunAI}
+            rerunRequested={rerunRequested.has(current.seq)}
           />
         ) : (
           <div className="text-slate-500 text-sm p-4">Loading proposal…</div>

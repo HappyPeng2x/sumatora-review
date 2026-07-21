@@ -3,6 +3,8 @@ interface Props {
   busy: boolean
   onAccept: () => void
   onReject: () => void
+  onRerunAI?: () => void
+  rerunRequested?: boolean
 }
 
 /**
@@ -10,7 +12,7 @@ interface Props {
  * ContextCard now, right next to the English sense it translates, so this
  * doesn't need to show or own any per-sense state.
  */
-export function DecisionBar({ model, busy, onAccept, onReject }: Props) {
+export function DecisionBar({ model, busy, onAccept, onReject, onRerunAI, rerunRequested }: Props) {
   return (
     <div className="flex flex-col gap-3 p-4 bg-slate-800 rounded-lg border border-slate-700">
       <div className="text-xs text-slate-500">Draft by {model} &middot; edit inline above, semicolon-separated synonyms</div>
@@ -30,6 +32,15 @@ export function DecisionBar({ model, busy, onAccept, onReject }: Props) {
           Reject
         </button>
       </div>
+      {onRerunAI && (
+        <button
+          disabled={busy || rerunRequested}
+          onClick={onRerunAI}
+          className="text-xs text-indigo-400 hover:text-indigo-300 disabled:opacity-50 disabled:hover:text-indigo-400 self-start"
+        >
+          {rerunRequested ? 'Regeneration requested ✓' : 'Draft looks wrong – re-run AI ↻'}
+        </button>
+      )}
     </div>
   )
 }
