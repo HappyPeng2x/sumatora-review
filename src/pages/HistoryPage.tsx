@@ -10,9 +10,16 @@ import {
   type Proposal,
 } from '../lib/proposals'
 import { requestRegeneration, fetchRegenerateRequestedSeqs } from '../lib/regenerate'
+import { fetchHeadword, type Headword } from '../lib/entries'
 import { EntryReviewer } from '../components/EntryReviewer'
+import { HeadwordLine } from '../components/HeadwordLine'
 
 const LANG = 'fre'
+
+// Module-level so headwords fetched on an earlier visit to this tab don't
+// get re-fetched every time -- gitender's entries/ never changes for an
+// already-decided seq, so there's nothing to invalidate.
+const headwordCache = new Map<number, Headword>()
 
 const DECISION_LABEL: Record<Decision, string> = {
   accepted: 'accepted',
@@ -42,6 +49,7 @@ export function HistoryPage() {
   const [redoInitialGlosses, setRedoInitialGlosses] = useState<string[][] | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [headwords, setHeadwords] = useState<Map<number, Headword>>(headwordCache)
 
   const refresh = useCallback(async () => {
     setError(null)
@@ -71,6 +79,23 @@ export function HistoryPage() {
   useEffect(() => {
     refresh()
   }, [refresh])
+
+  useEffect(() => {
+    if (!rows) return
+    const missing = rows.filter((r) => !headwordCache.has(r.seq))
+    if (missing.length === 0) return
+    let cancelled = false
+    Promise.allSettled(missing.map((r) => fetchHeadword(r.seq).then((h) => [r.seq, h] as const))).then((results) => {
+      if (cancelled) return
+      for (const result of results) {
+        if (result.status === 'fulfilled') headwordCache.set(...result.value)
+      }
+      setHeadwords(new Map(headwordCache))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [rows])
 
   useEffect(() => {
     if (redoSeq == null) return
@@ -176,9 +201,10 @@ export function HistoryPage() {
             onClick={() => setRedoSeq(d.seq)}
             className="flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-slate-800"
           >
-            <div className="flex flex-col">
-              <span className="text-slate-100 text-sm">seq {d.seq}</span>
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <HeadwordLine headword={headwords.get(d.seq)} />
               <span className="text-slate-500 text-xs">
+                seq {d.seq} &middot;{' '}
                 {d.reviewedAt != null ? new Date(d.reviewedAt).toLocaleString() : `${DECISION_LABEL[d.decision]} elsewhere`}
               </span>
             </div>

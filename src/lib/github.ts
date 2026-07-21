@@ -8,6 +8,8 @@ export const PROPOSALS_REPO = 'HappyPeng2x/Sumatora-Translation-Proposals-JMDict
 export const PROPOSALS_REF = 'main'
 export const RENDER_REPO = 'HappyPeng2x/gitenderml'
 export const RENDER_REF = 'main'
+export const ENTRIES_REPO = 'HappyPeng2x/gitender'
+export const ENTRIES_REF = 'main'
 export const INDEX_REPO = 'HappyPeng2x/SumatoraIndex'
 export const INDEX_REF = 'master'
 
